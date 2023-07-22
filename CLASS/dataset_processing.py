@@ -2,7 +2,6 @@ import re
 import pandas as pd
 
 SOURCE_PATH = 'top_info.xlsx' #исходник с темами и описанием
-OUTPUT_PATH = 'preprocessed.csv' #файл с сортированными темами
 
 REPLACEMENT_DICT = {
     'ПО':'програмное обеспечение',
@@ -58,9 +57,16 @@ def main():
         abr.loc[:,'text'] = abr.loc[:,'text'].apply(lambda row: replacement(word, row))
         full_data = pd.concat([full_data, abr], axis=0, ignore_index=True).drop_duplicates(keep='last')
 
-    print('Вывод данных в файл')
-    full_data.to_csv(OUTPUT_PATH, index=False)
+    full_data = full_data.sample(frac=1).reset_index(drop=True) #перемешиваем строки
 
+    print('Вывод данных в файл')
+    size = int(len(full_data)*0.8)
+    
+    train_df = full_data[:size] #делим на тренировочные данные и тестовые
+    test_df = full_data[size:]
+
+    train_df.to_csv('train.csv', index=False)
+    test_df.to_csv('test.csv', index=False)
 
 if __name__ == '__main__':
     main()
