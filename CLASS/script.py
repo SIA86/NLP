@@ -9,80 +9,46 @@ import pandas as pd
 import numpy as np
 import os, re
 
-ACCURACY = 0.10 #параметр, который определяет при какой значении вероятности можно отнести тему обращения в техподдержку к определенной категории.
 
 SOURCE_PATH = 'top_info.xlsx' #исходник с темами и описанием
 OUTPUT_PATH = 'themes.csv' #файл с сортированными темами
+THEME_NAMES_PATH = 'themes.xlsx' #файл с темами (категориями)
 SUMMARY = 'summary.csv' #файл подсчет количества тем
 
 def cleaning_up(raw_text):
-    regex = r"{[a-zA-z0-9.,!|;:#]+}|![a-zA-z0-9.,!|;:#]+!|\n|\xa0"
+    regex1 = r"{[a-zA-z0-9.,!|;:*#]+}|![a-zA-z0-9.*,!|;:#]+!|\n|\xa0"
+    regex2 =r"[Дд]обр.{1,3}\s.{1,6}[!.\s]|[зЗ]драв.{1,8}[!.\s]"
     subst = ''
-    result = re.sub(regex, subst, raw_text, 0, re.MULTILINE)
-    result = result.split('УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ')[0]
+    result = re.sub(regex1, subst, raw_text, 0, re.MULTILINE)
+    result = re.sub(regex2, subst, result, 0, re.MULTILINE)
+    result = result.split('УВЕДОМЛЕНИЕ О КОНФИДЕНЦИАЛЬНОСТИ')[0].strip()
+
     return result
 
-
-
-def main():
-    #Список тем-кандидатов
-    candidate_labels = ['Не работает почта ЕПС (единая почтовая система)', 
-                        'Отремонтировать МФУ (многофункциональное устройство)', 
-                        'Настроить почту на мобильном телефоне, смартфоне', 
-                        'Проблема с почтой (переполнен ящик, не отправляются письма)', 
-                        'Настроить принтер, МФУ (многофункциональное устройство)', 
-                        'Заменить картридж', 
-                        'Установка программного обеспечения', 
-                        'Сдать оборудование', 
-                        'Настроить электронную подпись (сертификат ЭЦП)', 
-                        'Переместить автоматизированное рабочее место или оборудование', 
-                        'Настроить новое рабочее место для нового сотрудника', 
-                        'Не работает телефон', 
-                        'Не работает компьютер', 
-                        'Создание внутренней учётной записи для нового сотрудника', 
-                        'Создать почтовый ящик', 
-                        'Разблокировать учётную запись сотрудника', 
-                        'Разблокировать доступ в автоматизированную систему МГГТ', 
-                        'Восстановить в МОСЭДО (Московский электронный документооборот)', 
-                        'Восстановить в СДО (система документооборота)', 
-                        'Доступ к информационной системе (база данных, АС Договор, АС Архив, АС Кадры)', 
-                        'Доступ к отчётам (Discover, Power BI, Oracle)', 
-                        'Доступ к файловым ресурсам (папка на диске)', 
-                        'Доступ в СДО (система документооборота)', 
-                        'Доступ в МОЭСДО (Московский элетронный документооборот)', 
-                        'Чтение/Запись CD/DVD', 
-                        'Доступ в Интернет', 
-                        'Доступ к disk.mggt.ru', 
-                        'Доступ в VDI (виртуальный рабочий стол)', 
-                        'Удаленный доступ', 
-                        'Доступ в Комнату хранения (добавить или исключить из списка)', 
-                        'Доступ в помещение (добавить или исключить из списка)', 
-                        'Сообщить об инциденте (незапланированное прерывание IT-услуги или снижение качества)', 
-                        'Запрос на обслуживание (консультация или стандартное изменения или доступ к IT-услуге)', 
-                        'Запрос на оборудование',
-                        'Не работает пропуск (продлить/заказать новый)',
-                        'Подать данные полевых бригад', 
-                        'Запрос на тестирование', 
-                        'Вопрос по работе: Генплан, Техпаспорт и т.д', 
-                        'Загрузка в АСУ ОДС (автоматизированная сиситема объединенной диспетчерской службы)',
-                        'САПР МГГТ (система автоматизированного проектирования)',
-                        'Проблема с модулем согласования']
-
-    #Подгрузка предобученной модели ИИ (https://huggingface.co/models?pipeline_tag=zero-shot-classification&language=ru&sort=trending)
-    print('Загрузка предобученной нейронной сети')
-    classifier = pipeline("zero-shot-classification", model='joeddav/xlm-roberta-large-xnli')
-
+def load_and_process():
     #Объединяем столбцы в одни текст
     print('Обработка исходных данных')
     data = pd.read_excel(SOURCE_PATH, header=0)
-    data = data.iloc[:,:2]
-    data = data.fillna('')
-    data['Разделитель'] = '. '
-    data['Тема_с_описанием'] = data['Тема'] + data['Разделитель'] + data['Описание']
-    data = data[['Тема', 'Тема_с_описанием']]
-    data['Тема_с_описанием'] = data['Тема_с_описанием'].apply(lambda row: cleaning_up(row))
+    data = data.iloc[:,:3]
+    data = data.fillna('') 
+    data['Описание'] = data['Описание'].apply(lambda row: cleaning_up(row)) #вычищаем весь мусор
     
+    data['Разделитель'] = '. '
+    data['Тема_с_описанием'] = data['Тема'] + data['Разделитель'] + data['Описание'] #объединяем тему с описанием
+    data = data[['Тема', 'Тема_с_описанием']]
 
+    print('Вывод данных в файл')
+    data.to_csv(OUTPUT_PATH, index=False)
+
+    return data
+
+def main():
+    #Подгрузка предобученной модели ИИ (https://huggingface.co/models?pipeline_tag=zero-shot-classification&language=ru&sort=trending)
+    print('Загрузка предобученной нейронной сети')
+    classifier = pipeline("text_classification", model='SIA86/bert-cased-text_class')
+
+    preprocessed_data = load_and_process()
+    
     #Чтение данных и запись тем в новый файл. Если чтение прервется - просто перезапустить скрипт. Чтения начнется с того места, где остановились
     print('Проверка наличия ранее созданного файла для вывода данных')
     if not os.path.isfile(OUTPUT_PATH): #если файл не был ранее создан
@@ -98,25 +64,27 @@ def main():
         total_length = len(lines)-1 #всего строк в файле за вычетом заголовка 
         print(f'Всего записей в файле для вывода данных: {total_length}')
 
-    for row in data[total_length:].rolling(1): #двигаемся по строкам начинная с места остановки
+    for row in preprocessed_data[total_length:].rolling(1): #двигаемся по строкам начинная с места остановки
         print(f'ИИ анализирует {row.index[0]} строку из таблицы')
-        result = classifier(row['Тема_с_описанием'].iloc[0], candidate_labels) #отправляем строку к ИИ
+        result = classifier(row['Тема_с_описанием'].iloc[0]) #отправляем строку к ИИ
         with open(OUTPUT_PATH, 'a', encoding="utf-8") as fw:
             #если точность с которой ИИ выбрал категорию выше ACCURACY добавляем ее в новый файл, иначе добавляем в 'Другие запросы'
-            fw.write(f"{row['Тема'].iloc[0]};{result['labels'][0]};{result['scores'][0]}" if result['scores'][0] > ACCURACY else f"{row['Тема'].iloc[0]};Другие запросы;")
+            fw.write(f"{row['Тема'].iloc[0]};{result['labels'][0]};{result['scores'][0]}")
             fw.write('\n')
         
     print('Анализ исходных данных завершен.')
     print('Идет подсчет совпадений по каждой теме')
+    cathegory = pd.read_excel(THEME_NAMES_PATH, header=None).to_dict()[0]
+
     #Считаем количество тем и выводим результат в отдельный файл
     themes_df = pd.read_csv(OUTPUT_PATH, sep=';') 
     themes_df = themes_df[' Новая_тема']
 
-    df = pd.DataFrame(np.zeros(shape=(1,len(candidate_labels))), columns=candidate_labels) 
+    df = pd.DataFrame(np.zeros(shape=(1,len(cathegory))), columns=list(cathegory.values())) 
 
-    for candidate in candidate_labels:
+    for cathegory in list(cathegory.values()):
         try:
-            df[candidate] = themes_df.value_counts()[candidate]
+            df[cathegory] = themes_df.value_counts()[cathegory]
         except KeyError:
             pass
     df= df.T
@@ -127,3 +95,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+    
